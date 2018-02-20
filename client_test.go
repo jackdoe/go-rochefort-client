@@ -26,7 +26,7 @@ func generateTestCases(n int) [][]byte {
 func TestEverything(t *testing.T) {
 	host := os.Getenv("ROCHEFORT_TEST")
 	if host == "" {
-		t.Skip("skipping test because of no ROCHEFORT_HOST env")
+		t.Skip("skipping test because of no ROCHEFORT_TEST env")
 	}
 	r := NewClient(host, nil)
 
@@ -103,7 +103,7 @@ func TestEverything(t *testing.T) {
 func BenchmarkSetAndGet(b *testing.B) {
 	host := os.Getenv("ROCHEFORT_TEST")
 	if host == "" {
-		panic("skipping test because of no ROCHEFORT_HOST env")
+		panic("skipping test because of no ROCHEFORT_TEST env")
 	}
 	r := NewClient(host, nil)
 	key := string(randBytes(10))

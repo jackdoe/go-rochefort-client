@@ -170,7 +170,7 @@ func (this *Client) Scan(namespace string, callback func(rochefortOffset uint64,
 		data := make([]byte, len)
 		_, err = io.ReadFull(resp.Body, data)
 		if err != nil {
-			return errors.New(fmt.Sprintf("expected at least %d bytes, but got EOF, error: %s", len, err.Error))
+			return errors.New(fmt.Sprintf("expected at least %d bytes, but got EOF, error: %s", len, err.Error()))
 		}
 
 		callback(offset, data)

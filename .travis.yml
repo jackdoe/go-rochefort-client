@@ -9,10 +9,10 @@ services:
   - docker
 
 env:
-  - ROCHEFORT_TEST=http://localhost:4500
+  - ROCHEFORT_TEST=http://localhost:8000
 
 before_install:
-  - docker pull jackdoe/rochefort:0.5
-  - docker run -d -p 127.0.0.1:4500:4500 jackdoe/rochefort:0.5
+  - docker pull jackdoe/rochefort:1.0
+  - docker run -d -p 127.0.0.1:8000:8000 jackdoe/rochefort:1.0
 
 script: go test ./...

@@ -23,6 +23,37 @@ func generateTestCases(n int) [][]byte {
 	return out
 }
 
+func TestModify(t *testing.T) {
+	host := os.Getenv("ROCHEFORT_TEST")
+	if host == "" {
+		t.Skip("skipping test because of no ROCHEFORT_TEST env")
+	}
+	r := NewClient(host, nil)
+	ns := "modify"
+	off, err := r.Append(ns, 5, []byte("abc"))
+	if err != nil {
+		t.Log(err)
+		t.FailNow()
+	}
+
+	_, err = r.Modify(ns, off, 1, []byte("zxcv"))
+	if err != nil {
+		t.Log(err)
+		t.FailNow()
+	}
+	data, err := r.Get(ns, off)
+	if err != nil {
+		t.Log(err)
+		t.FailNow()
+	}
+
+	if string(data) != "azxcv" {
+		t.Logf("unexpected read: %s", string(data))
+		t.FailNow()
+	}
+
+}
+
 func TestEverything(t *testing.T) {
 	host := os.Getenv("ROCHEFORT_TEST")
 	if host == "" {
@@ -47,7 +78,7 @@ func TestEverything(t *testing.T) {
 		}
 
 		for _, currentcase := range cases {
-			off, err := r.Append(ns, string(randBytes(30)), currentcase)
+			off, err := r.Append(ns, 0, currentcase)
 			if err != nil {
 				t.Log(err)
 				t.FailNow()
@@ -106,10 +137,9 @@ func BenchmarkSetAndGet(b *testing.B) {
 		panic("skipping test because of no ROCHEFORT_TEST env")
 	}
 	r := NewClient(host, nil)
-	key := string(randBytes(10))
 	value := randBytes(30)
 	for n := 0; n < b.N; n++ {
-		off, err := r.Append("", key, value)
+		off, err := r.Append("", 0, value)
 		if err != nil {
 			panic(err)
 		}

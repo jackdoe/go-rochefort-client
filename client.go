@@ -12,7 +12,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -22,12 +21,17 @@ type Client struct {
 	getUrl      string
 	getMultiUrl string
 	appendUrl   string
+	modifyUrl   string
 	scanUrl     string
 	http        *http.Client
 }
 
 type appendResponse struct {
 	Offset uint64
+}
+
+type modifyResponse struct {
+	Success bool
 }
 
 // Creates new client, takes rochefort url and http client (or nil, at which case it uses a client with 1 second timeout)
@@ -49,14 +53,16 @@ func NewClient(url string, httpClient *http.Client) *Client {
 		getUrl:      fmt.Sprintf("%sget", url),
 		getMultiUrl: fmt.Sprintf("%sgetMulti", url),
 		appendUrl:   fmt.Sprintf("%sappend", url),
+		modifyUrl:   fmt.Sprintf("%smodify", url),
 		scanUrl:     fmt.Sprintf("%sscan", url),
 		http:        httpClient,
 	}
 }
 
 // Append to the rochefort service, returns stored offset and error. in case of error the returned offset is 0, keep in mind that 0 is valid offset, so check the error field
-func (this *Client) Append(namespace, id string, data []byte) (uint64, error) {
-	url := fmt.Sprintf("%s?id=%s&namespace=%s", this.appendUrl, url.PathEscape(id), namespace)
+// allocSize parameter is used if you want to allocate more space than your data, so you can inplace modify it; can be 0
+func (this *Client) Append(namespace string, allocSize uint32, data []byte) (uint64, error) {
+	url := fmt.Sprintf("%s?allocSize=%d&namespace=%s", this.appendUrl, allocSize, namespace)
 	resp, err := this.http.Post(url, "application/octet-stream", bytes.NewReader(data))
 	if err != nil {
 		return 0, err
@@ -76,6 +82,29 @@ func (this *Client) Append(namespace, id string, data []byte) (uint64, error) {
 		return 0, err
 	}
 	return offsetResponse.Offset, nil
+}
+
+func (this *Client) Modify(namespace string, offset uint64, position uint32, data []byte) (bool, error) {
+	url := fmt.Sprintf("%s?offset=%d&pos=%d&namespace=%s", this.modifyUrl, offset, position, namespace)
+	resp, err := this.http.Post(url, "application/octet-stream", bytes.NewReader(data))
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return false, nonOkError(resp.StatusCode, resp.Body)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return false, err
+	}
+	var modifyResponse modifyResponse
+	if err := json.Unmarshal(body, &modifyResponse); err != nil {
+		return false, err
+	}
+	return modifyResponse.Success, nil
 }
 
 func nonOkError(code int, body io.Reader) error {

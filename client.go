@@ -61,8 +61,12 @@ func NewClient(url string, httpClient *http.Client) *Client {
 
 // Append to the rochefort service, returns stored offset and error. in case of error the returned offset is 0, keep in mind that 0 is valid offset, so check the error field
 // allocSize parameter is used if you want to allocate more space than your data, so you can inplace modify it; can be 0
-func (this *Client) Append(namespace string, allocSize uint32, data []byte) (uint64, error) {
+// the tags parameter is used to build online inverted index that can be used from Scan()
+func (this *Client) Append(namespace string, tags []string, allocSize uint32, data []byte) (uint64, error) {
 	url := fmt.Sprintf("%s?allocSize=%d&namespace=%s", this.appendUrl, allocSize, namespace)
+	if tags != nil {
+		url = fmt.Sprintf("%s&tags=%s", url, strings.Join(tags, ","))
+	}
 	resp, err := this.http.Post(url, "application/octet-stream", bytes.NewReader(data))
 	if err != nil {
 		return 0, err
@@ -168,8 +172,12 @@ func (this *Client) GetMulti(namespace string, offsets []uint64) ([][]byte, erro
 }
 
 // Scan the whole namespace, callback called with rochefortOffset and the value at this offset
-func (this *Client) Scan(namespace string, callback func(rochefortOffset uint64, value []byte)) error {
+// if you pass tags argument (e.g. a,b) it will scan only the offsets tagged with the specific tags (e.g. a,b)
+func (this *Client) Scan(namespace string, tags []string, callback func(rochefortOffset uint64, value []byte)) error {
 	url := fmt.Sprintf("%s?namespace=%s", this.scanUrl, namespace)
+	if tags != nil {
+		url = fmt.Sprintf("%s&tags=%s", url, strings.Join(tags, ","))
+	}
 
 	resp, err := this.http.Get(url)
 	if err != nil {

@@ -12,7 +12,7 @@ env:
   - ROCHEFORT_TEST=http://localhost:8000
 
 before_install:
-  - docker pull jackdoe/rochefort:1.0
-  - docker run -d -p 127.0.0.1:8000:8000 jackdoe/rochefort:1.0
+  - docker pull jackdoe/rochefort:1.2
+  - docker run -d -p 127.0.0.1:8000:8000 jackdoe/rochefort:1.2
 
 script: go test ./...

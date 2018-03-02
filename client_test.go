@@ -30,7 +30,7 @@ func TestModify(t *testing.T) {
 	}
 	r := NewClient(host, nil)
 	ns := "modify"
-	off, err := r.Append(ns, 5, []byte("abc"))
+	off, err := r.Append(ns, nil, 5, []byte("abc"))
 	if err != nil {
 		t.Log(err)
 		t.FailNow()
@@ -51,6 +51,39 @@ func TestModify(t *testing.T) {
 		t.Logf("unexpected read: %s", string(data))
 		t.FailNow()
 	}
+}
+
+func TestSearch(t *testing.T) {
+	host := os.Getenv("ROCHEFORT_TEST")
+	if host == "" {
+		t.Skip("skipping test because of no ROCHEFORT_TEST env")
+	}
+	r := NewClient(host, nil)
+
+	ns := "search"
+	_, err := r.Append(ns, []string{"a"}, 0, []byte("aaa"))
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = r.Append(ns, []string{"b"}, 0, []byte("bbb"))
+	if err != nil {
+		panic(err)
+	}
+	scanned := []string{}
+	r.Scan(ns, []string{"a", "b"}, func(offset uint64, data []byte) {
+		scanned = append(scanned, string(data))
+	})
+
+	if scanned[0] != "aaa" {
+		t.Logf("unexpected read: %s", scanned[0])
+		t.FailNow()
+	}
+
+	if scanned[1] != "bbb" {
+		t.Logf("unexpected read: %s", scanned[0])
+		t.FailNow()
+	}
 
 }
 
@@ -67,7 +100,7 @@ func TestEverything(t *testing.T) {
 		added := make([][]byte, 0)
 		indexed := make(map[uint64][]byte)
 
-		err := r.Scan(ns, func(offset uint64, data []byte) {
+		err := r.Scan(ns, nil, func(offset uint64, data []byte) {
 			indexed[offset] = data
 		})
 		t.Logf("ns: %s, initial scan: %d", ns, len(indexed))
@@ -78,7 +111,7 @@ func TestEverything(t *testing.T) {
 		}
 
 		for _, currentcase := range cases {
-			off, err := r.Append(ns, 0, currentcase)
+			off, err := r.Append(ns, nil, 0, currentcase)
 			if err != nil {
 				t.Log(err)
 				t.FailNow()
@@ -111,7 +144,7 @@ func TestEverything(t *testing.T) {
 				}
 			}
 
-			err = r.Scan(ns, func(offset uint64, data []byte) {
+			err = r.Scan(ns, nil, func(offset uint64, data []byte) {
 				v, ok := indexed[offset]
 				if !ok {
 					t.Log("missing offset from scan")
@@ -139,7 +172,7 @@ func BenchmarkSetAndGet(b *testing.B) {
 	r := NewClient(host, nil)
 	value := randBytes(30)
 	for n := 0; n < b.N; n++ {
-		off, err := r.Append("", 0, value)
+		off, err := r.Append("", nil, 0, value)
 		if err != nil {
 			panic(err)
 		}

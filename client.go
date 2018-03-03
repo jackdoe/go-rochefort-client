@@ -214,6 +214,20 @@ func (this *Client) Scan(namespace string, callback func(rochefortOffset uint64,
 }
 
 // Search the whole namespace based on the tagged (with Append tags) blobs, callback called with rochefortOffset and the value at this offset
+// example:
+//
+// r.Search(ns, map[string]interface{}{
+// 	"or": []interface{}{
+// 		map[string]interface{}{
+// 			"tag": "a",
+// 		},
+// 		map[string]interface{}{
+// 			"tag": "b",
+// 		},
+// 	},
+// }, func(offset uint64, data []byte) {
+// 	scanned = append(scanned, string(data))
+// })
 func (this *Client) Search(namespace string, query map[string]interface{}, callback func(rochefortOffset uint64, value []byte)) error {
 	url := fmt.Sprintf("%s?namespace=%s", this.queryUrl, namespace)
 

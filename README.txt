@@ -34,9 +34,30 @@ func (this *Client) GetMulti(namespace string, offsets []uint64) ([][]byte, erro
 
 func (this *Client) Modify(namespace string, offset uint64, position uint32, data []byte) (bool, error)
 
-func (this *Client) Scan(namespace string, tags []string, callback func(rochefortOffset uint64, value []byte)) error
+func (this *Client) Scan(namespace string, callback func(rochefortOffset uint64, value []byte)) error
     Scan the whole namespace, callback called with rochefortOffset and the
-    value at this offset if you pass tags argument (e.g. a,b) it will scan
-    only the offsets tagged with the specific tags (e.g. a,b)
+    value at this offset
+
+func (this *Client) Search(namespace string, query map[string]interface{}, callback func(rochefortOffset uint64, value []byte)) error
+    Search the whole namespace based on the tagged (with Append tags) blobs,
+    callback called with rochefortOffset and the value at this offset
+    example:
+
+    r.Search(ns, map[string]interface{}{
+
+	"or": []interface{}{
+		map[string]interface{}{
+			"tag": "a",
+		},
+		map[string]interface{}{
+			"tag": "b",
+		},
+	},
+
+    }, func(offset uint64, data []byte) {
+
+	scanned = append(scanned, string(data))
+
+    })
 
 

@@ -71,7 +71,16 @@ func TestSearch(t *testing.T) {
 		panic(err)
 	}
 	scanned := []string{}
-	r.Scan(ns, []string{"a", "b"}, func(offset uint64, data []byte) {
+	r.Search(ns, map[string]interface{}{
+		"or": []interface{}{
+			map[string]interface{}{
+				"tag": "a",
+			},
+			map[string]interface{}{
+				"tag": "b",
+			},
+		},
+	}, func(offset uint64, data []byte) {
 		scanned = append(scanned, string(data))
 	})
 
@@ -100,7 +109,7 @@ func TestEverything(t *testing.T) {
 		added := make([][]byte, 0)
 		indexed := make(map[uint64][]byte)
 
-		err := r.Scan(ns, nil, func(offset uint64, data []byte) {
+		err := r.Scan(ns, func(offset uint64, data []byte) {
 			indexed[offset] = data
 		})
 		t.Logf("ns: %s, initial scan: %d", ns, len(indexed))
@@ -144,7 +153,7 @@ func TestEverything(t *testing.T) {
 				}
 			}
 
-			err = r.Scan(ns, nil, func(offset uint64, data []byte) {
+			err = r.Scan(ns, func(offset uint64, data []byte) {
 				v, ok := indexed[offset]
 				if !ok {
 					t.Log("missing offset from scan")

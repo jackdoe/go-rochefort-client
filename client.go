@@ -21,6 +21,7 @@ type Client struct {
 	getUrl      string
 	getMultiUrl string
 	appendUrl   string
+	queryUrl    string
 	modifyUrl   string
 	scanUrl     string
 	http        *http.Client
@@ -54,6 +55,7 @@ func NewClient(url string, httpClient *http.Client) *Client {
 		getMultiUrl: fmt.Sprintf("%sgetMulti", url),
 		appendUrl:   fmt.Sprintf("%sappend", url),
 		modifyUrl:   fmt.Sprintf("%smodify", url),
+		queryUrl:    fmt.Sprintf("%squery", url),
 		scanUrl:     fmt.Sprintf("%sscan", url),
 		http:        httpClient,
 	}
@@ -172,14 +174,55 @@ func (this *Client) GetMulti(namespace string, offsets []uint64) ([][]byte, erro
 }
 
 // Scan the whole namespace, callback called with rochefortOffset and the value at this offset
-// if you pass tags argument (e.g. a,b) it will scan only the offsets tagged with the specific tags (e.g. a,b)
-func (this *Client) Scan(namespace string, tags []string, callback func(rochefortOffset uint64, value []byte)) error {
+func (this *Client) Scan(namespace string, callback func(rochefortOffset uint64, value []byte)) error {
 	url := fmt.Sprintf("%s?namespace=%s", this.scanUrl, namespace)
-	if tags != nil {
-		url = fmt.Sprintf("%s&tags=%s", url, strings.Join(tags, ","))
-	}
 
 	resp, err := this.http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nonOkError(resp.StatusCode, resp.Body)
+	}
+
+	header := make([]byte, 12)
+
+	for {
+		_, err := io.ReadFull(resp.Body, header)
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return err
+		}
+
+		len := binary.LittleEndian.Uint32(header)
+		offset := binary.LittleEndian.Uint64(header[4:])
+
+		data := make([]byte, len)
+		_, err = io.ReadFull(resp.Body, data)
+		if err != nil {
+			return errors.New(fmt.Sprintf("expected at least %d bytes, but got EOF, error: %s", len, err.Error()))
+		}
+
+		callback(offset, data)
+	}
+	return nil
+}
+
+// Search the whole namespace based on the tagged (with Append tags) blobs, callback called with rochefortOffset and the value at this offset
+func (this *Client) Search(namespace string, query map[string]interface{}, callback func(rochefortOffset uint64, value []byte)) error {
+	url := fmt.Sprintf("%s?namespace=%s", this.queryUrl, namespace)
+
+	j, err := json.Marshal(query)
+	if err != nil {
+		return err
+	}
+
+	resp, err := this.http.Post(url, "application/json", bytes.NewBuffer(j))
 	if err != nil {
 		return err
 	}

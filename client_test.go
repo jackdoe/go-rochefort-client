@@ -30,25 +30,45 @@ func TestModify(t *testing.T) {
 	}
 	r := NewClient(host, nil)
 	ns := "modify"
-	off, err := r.Append(ns, nil, 5, []byte("abc"))
+	offsets, err := r.Set(&AppendInput{
+		AppendPayload: []*Append{{
+			Namespace: ns,
+			AllocSize: 5,
+			Data:      []byte("abc"),
+		}},
+	})
+	off := offsets.Offset[0]
 	if err != nil {
 		t.Log(err)
 		t.FailNow()
 	}
 
-	_, err = r.Modify(ns, off, 1, []byte("zxcv"))
+	_, err = r.Set(&AppendInput{
+		ModifyPayload: []*Modify{{
+			Namespace: ns,
+			Offset:    off,
+			Pos:       1,
+			Data:      []byte("zxcv"),
+		}},
+	})
+
 	if err != nil {
 		t.Log(err)
 		t.FailNow()
 	}
-	data, err := r.Get(ns, off)
+	data, err := r.Get(&GetInput{
+		GetPayload: []*Get{{
+			Namespace: ns,
+			Offset:    off,
+		}},
+	})
 	if err != nil {
 		t.Log(err)
 		t.FailNow()
 	}
 
-	if string(data) != "azxcv" {
-		t.Logf("unexpected read: %s", string(data))
+	if string(data[0]) != "azxcv" {
+		t.Logf("unexpected read: %s", string(data[0]))
 		t.FailNow()
 	}
 }
@@ -61,12 +81,27 @@ func TestSearch(t *testing.T) {
 	r := NewClient(host, nil)
 
 	ns := "search"
-	_, err := r.Append(ns, []string{"a"}, 0, []byte("aaa"))
+	_, err := r.Set(&AppendInput{
+		AppendPayload: []*Append{{
+			Namespace: ns,
+			Tags:      []string{"a"},
+			AllocSize: 0,
+			Data:      []byte("aaa"),
+		}},
+	})
+
 	if err != nil {
 		panic(err)
 	}
 
-	_, err = r.Append(ns, []string{"b"}, 0, []byte("bbb"))
+	_, err = r.Set(&AppendInput{
+		AppendPayload: []*Append{{
+			Namespace: ns,
+			Tags:      []string{"b"},
+			AllocSize: 0,
+			Data:      []byte("bbb"),
+		}},
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -120,27 +155,55 @@ func TestEverything(t *testing.T) {
 		}
 
 		for _, currentcase := range cases {
-			off, err := r.Append(ns, nil, 0, currentcase)
+			off, err := r.Set(&AppendInput{
+				AppendPayload: []*Append{{
+					Namespace: ns,
+					Data:      currentcase,
+				}, {
+					Namespace: ns,
+					Data:      []byte("zxc"),
+				}},
+			})
 			if err != nil {
 				t.Log(err)
 				t.FailNow()
 			}
-			offsets = append(offsets, off)
+			offsets = append(offsets, off.Offset[0], off.Offset[1])
 
-			fetched, err := r.Get(ns, off)
+			fetched, err := r.Get(&GetInput{
+				GetPayload: []*Get{{
+					Namespace: ns,
+					Offset:    off.Offset[0],
+				}, {
+					Namespace: ns,
+					Offset:    off.Offset[1],
+				}},
+			})
+
 			if err != nil {
 				t.Log(err)
 				t.FailNow()
 			}
-			if !bytes.Equal(fetched, currentcase) {
+			if !bytes.Equal(fetched[0], currentcase) {
 				t.Log("fetched != case")
 				t.FailNow()
 			}
 
-			indexed[off] = currentcase
+			indexed[off.Offset[0]] = currentcase
+			indexed[off.Offset[1]] = []byte("zxc")
 
-			added = append(added, fetched)
-			many, err := r.GetMulti(ns, offsets)
+			added = append(added, fetched[0], fetched[1])
+
+			multiRequest := &GetInput{
+				GetPayload: []*Get{},
+			}
+			for _, offset := range offsets {
+				multiRequest.GetPayload = append(multiRequest.GetPayload, &Get{
+					Namespace: ns,
+					Offset:    offset,
+				})
+			}
+			many, err := r.Get(multiRequest)
 			if err != nil {
 				t.Log(err)
 				t.FailNow()
@@ -181,11 +244,21 @@ func BenchmarkSetAndGet(b *testing.B) {
 	r := NewClient(host, nil)
 	value := randBytes(30)
 	for n := 0; n < b.N; n++ {
-		off, err := r.Append("", nil, 0, value)
+		off, err := r.Set(&AppendInput{
+			AppendPayload: []*Append{{
+				Namespace: "bench",
+				Data:      value,
+			}},
+		})
 		if err != nil {
 			panic(err)
 		}
-		_, err = r.Get("", off)
+		_, err = r.Get(&GetInput{
+			GetPayload: []*Get{{
+				Namespace: "bench",
+				Offset:    off.Offset[0],
+			}},
+		})
 		if err != nil {
 			panic(err)
 		}

@@ -17,22 +17,12 @@ import (
 )
 
 type Client struct {
-	url         string
-	getUrl      string
-	getMultiUrl string
-	appendUrl   string
-	queryUrl    string
-	modifyUrl   string
-	scanUrl     string
-	http        *http.Client
-}
-
-type appendResponse struct {
-	Offset uint64
-}
-
-type modifyResponse struct {
-	Success bool
+	url      string
+	getUrl   string
+	setUrl   string
+	queryUrl string
+	scanUrl  string
+	http     *http.Client
 }
 
 // Creates new client, takes rochefort url and http client (or nil, at which case it uses a client with 1 second timeout)
@@ -50,83 +40,24 @@ func NewClient(url string, httpClient *http.Client) *Client {
 	}
 
 	return &Client{
-		url:         url,
-		getUrl:      fmt.Sprintf("%sget", url),
-		getMultiUrl: fmt.Sprintf("%sgetMulti", url),
-		appendUrl:   fmt.Sprintf("%sappend", url),
-		modifyUrl:   fmt.Sprintf("%smodify", url),
-		queryUrl:    fmt.Sprintf("%squery", url),
-		scanUrl:     fmt.Sprintf("%sscan", url),
-		http:        httpClient,
+		url:      url,
+		getUrl:   fmt.Sprintf("%sget", url),
+		setUrl:   fmt.Sprintf("%sset", url),
+		queryUrl: fmt.Sprintf("%squery", url),
+		scanUrl:  fmt.Sprintf("%sscan", url),
+		http:     httpClient,
 	}
 }
 
-// Append to the rochefort service, returns stored offset and error. in case of error the returned offset is 0, keep in mind that 0 is valid offset, so check the error field
+// Set to the rochefort service, returns stored offset and error. in case of error the returned offset is 0, keep in mind that 0 is valid offset, so check the error field
 // allocSize parameter is used if you want to allocate more space than your data, so you can inplace modify it; can be 0
 // the tags parameter is used to build online inverted index that can be used from Scan()
-func (this *Client) Append(namespace string, tags []string, allocSize uint32, data []byte) (uint64, error) {
-	url := fmt.Sprintf("%s?allocSize=%d&namespace=%s", this.appendUrl, allocSize, namespace)
-	if tags != nil {
-		url = fmt.Sprintf("%s&tags=%s", url, strings.Join(tags, ","))
-	}
-	resp, err := this.http.Post(url, "application/octet-stream", bytes.NewReader(data))
+func (this *Client) Set(input *AppendInput) (*AppendOutput, error) {
+	data, err := input.Marshal()
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return 0, nonOkError(resp.StatusCode, resp.Body)
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return 0, err
-	}
-	var offsetResponse appendResponse
-	if err := json.Unmarshal(body, &offsetResponse); err != nil {
-		return 0, err
-	}
-	return offsetResponse.Offset, nil
-}
-
-func (this *Client) Modify(namespace string, offset uint64, position uint32, data []byte) (bool, error) {
-	url := fmt.Sprintf("%s?offset=%d&pos=%d&namespace=%s", this.modifyUrl, offset, position, namespace)
-	resp, err := this.http.Post(url, "application/octet-stream", bytes.NewReader(data))
-	if err != nil {
-		return false, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return false, nonOkError(resp.StatusCode, resp.Body)
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return false, err
-	}
-	var modifyResponse modifyResponse
-	if err := json.Unmarshal(body, &modifyResponse); err != nil {
-		return false, err
-	}
-	return modifyResponse.Success, nil
-}
-
-func nonOkError(code int, body io.Reader) error {
-	b, err := ioutil.ReadAll(body)
-	if err != nil {
-		return errors.New(fmt.Sprintf("expected status code 200, but got: %d, couldnt read the body got: %s", code, err.Error()))
-	} else {
-		return errors.New(fmt.Sprintf("expected status code 200, but got: %d, body: %s", code, string(b)))
-	}
-
-}
-
-// Get from rochefort, use the offset returned by Append
-func (this *Client) Get(namespace string, offset uint64) ([]byte, error) {
-	url := fmt.Sprintf("%s?offset=%d&namespace=%s", this.getUrl, offset, namespace)
-	resp, err := this.http.Get(url)
+	resp, err := this.http.Post(this.setUrl, "application/octet-stream", bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
@@ -136,19 +67,35 @@ func (this *Client) Get(namespace string, offset uint64) ([]byte, error) {
 		return nil, nonOkError(resp.StatusCode, resp.Body)
 	}
 
-	return ioutil.ReadAll(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	out := &AppendOutput{}
+	err = out.Unmarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
-// GetMulti fetches multiple records in one round trip
-func (this *Client) GetMulti(namespace string, offsets []uint64) ([][]byte, error) {
-	url := fmt.Sprintf("%s?namespace=%s", this.getMultiUrl, namespace)
+func nonOkError(code int, body io.Reader) error {
+	b, err := ioutil.ReadAll(body)
+	if err != nil {
+		return errors.New(fmt.Sprintf("expected status code 200, but got: %d, couldnt read the body got: %s", code, err.Error()))
+	} else {
+		return errors.New(fmt.Sprintf("expected status code 200, but got: %d, body: %s", code, string(b)))
+	}
+}
 
-	encodedOffsets := make([]byte, len(offsets)*8)
-	for i, offset := range offsets {
-		binary.LittleEndian.PutUint64(encodedOffsets[(i*8):], offset)
+// Get fetches multiple records in one round trip
+func (this *Client) Get(input *GetInput) ([][]byte, error) {
+	b, err := input.Marshal()
+	if err != nil {
+		return nil, err
 	}
 
-	resp, err := this.http.Post(url, "application/octet-stream", bytes.NewReader(encodedOffsets))
+	resp, err := this.http.Post(this.getUrl, "application/octet-stream", bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
@@ -162,15 +109,12 @@ func (this *Client) GetMulti(namespace string, offsets []uint64) ([][]byte, erro
 	if err != nil {
 		return nil, err
 	}
-	offset := uint32(0)
-	out := make([][]byte, 0)
-	bodyLen := uint32(len(body))
-	for offset < bodyLen {
-		len := binary.LittleEndian.Uint32(body[offset:])
-		out = append(out, body[(offset+4):(offset+4+len)])
-		offset += 4 + len
+	out := &GetOutput{}
+	err = out.Unmarshal(body)
+	if err != nil {
+		return nil, err
 	}
-	return out, nil
+	return out.Data, nil
 }
 
 // Scan the whole namespace, callback called with rochefortOffset and the value at this offset

@@ -37,6 +37,12 @@ func TestModify(t *testing.T) {
 			Data:      []byte("abc"),
 		}},
 	})
+
+	if err != nil {
+		t.Log(err)
+		t.FailNow()
+	}
+
 	off := offsets.Offset[0]
 	if err != nil {
 		t.Log(err)
@@ -233,6 +239,23 @@ func TestEverything(t *testing.T) {
 			}
 
 		}
+		_, err = r.Compact(&NamespaceInput{
+			Namespace: ns,
+		})
+
+		if err != nil {
+			t.Log(err)
+			t.FailNow()
+		}
+
+		_, err = r.Delete(&NamespaceInput{
+			Namespace: ns,
+		})
+		if err != nil {
+			t.Log(err)
+			t.FailNow()
+		}
+
 	}
 }
 

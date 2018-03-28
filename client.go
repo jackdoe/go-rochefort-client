@@ -17,12 +17,14 @@ import (
 )
 
 type Client struct {
-	url      string
-	getUrl   string
-	setUrl   string
-	queryUrl string
-	scanUrl  string
-	http     *http.Client
+	url        string
+	getUrl     string
+	setUrl     string
+	queryUrl   string
+	scanUrl    string
+	deleteUrl  string
+	compactUrl string
+	http       *http.Client
 }
 
 // Creates new client, takes rochefort url and http client (or nil, at which case it uses a client with 1 second timeout)
@@ -40,12 +42,14 @@ func NewClient(url string, httpClient *http.Client) *Client {
 	}
 
 	return &Client{
-		url:      url,
-		getUrl:   fmt.Sprintf("%sget", url),
-		setUrl:   fmt.Sprintf("%sset", url),
-		queryUrl: fmt.Sprintf("%squery", url),
-		scanUrl:  fmt.Sprintf("%sscan", url),
-		http:     httpClient,
+		url:        url,
+		getUrl:     fmt.Sprintf("%sget", url),
+		setUrl:     fmt.Sprintf("%sset", url),
+		queryUrl:   fmt.Sprintf("%squery", url),
+		scanUrl:    fmt.Sprintf("%sscan", url),
+		compactUrl: fmt.Sprintf("%scompact", url),
+		deleteUrl:  fmt.Sprintf("%sdelete", url),
+		http:       httpClient,
 	}
 }
 
@@ -72,6 +76,60 @@ func (this *Client) Set(input *AppendInput) (*AppendOutput, error) {
 		return nil, err
 	}
 	out := &AppendOutput{}
+	err = out.Unmarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (this *Client) Compact(input *NamespaceInput) (*SuccessOutput, error) {
+	data, err := input.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := this.http.Post(this.compactUrl, "application/octet-stream", bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, nonOkError(resp.StatusCode, resp.Body)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	out := &SuccessOutput{}
+	err = out.Unmarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (this *Client) Delete(input *NamespaceInput) (*SuccessOutput, error) {
+	data, err := input.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := this.http.Post(this.deleteUrl, "application/octet-stream", bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, nonOkError(resp.StatusCode, resp.Body)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	out := &SuccessOutput{}
 	err = out.Unmarshal(body)
 	if err != nil {
 		return nil, err
